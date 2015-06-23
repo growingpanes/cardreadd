@@ -1,0 +1,44 @@
+#!/usr/bin/env ruby
+require 'json'
+require 'uri'
+require 'net/http'
+
+timeout = 3600
+executable = "CmdpcProx"
+cmd = "LD_LIBRARY_PATH=libusb ./#{executable} -waitforgetactiveid=#{timeout} -getactiveid"
+
+unless File.exist?(executable)
+  puts "The #{executable} executable could not be found. Please see the README."
+  exit 1
+end
+
+def config
+  return @config if @config
+  config_file = ENV['VIDEO_WALL_CONFIG_FILE'] || '/etc/video_wall_config.json'
+  unless File.exist?(config_file)
+    puts "The config file #{config_file} could not be found. Please see the README."
+    exit 1
+  end
+  @config = JSON.parse(File.read(config_file))
+  return @config
+end
+config
+
+while true
+  print "Waiting for id... "
+  card_data = `#{cmd}`
+  unless card_data =~ /(\w\w\s)+/
+    puts "No card present"
+    next
+  end
+  print "Read card "
+  bytes = card_data.split
+  id = [bytes[1], bytes[0]].join.hex # data comes through little-endian
+  puts id
+
+  # send the card number to panesfe
+  card_uri = URI(config['panesfe_endpoint'] + "/presentations/card/#{id}")
+  Net::HTTP.get(card_uri)
+
+  sleep 2
+end
